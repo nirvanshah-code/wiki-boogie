@@ -1,0 +1,1271 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Wiki Boogie</title>
+<meta name="description" content="Race from one Wikipedia article to another using only the links inside each page.">
+<meta name="theme-color" content="#2A0E4A">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Bagel+Fat+One&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap">
+<style>
+/* Layout concept: a purple disco-lounge frame (landing, HUD, results) around one wide, calm cream reading page.
+   All the loud styling lives in the chrome; the article stays quiet. */
+:root {
+  --cream: #FFF1D6;
+  --paper: #FFFAF0;
+  --orange: #D2531A;
+  --orange-text: #A83C0C;
+  --pink: #FF2E88;
+  --pink-deep: #B8115F;
+  --purple: #2A0E4A;
+  --purple-2: #4A1D7C;
+  --purple-3: #6B3AA3;
+  --gold: #F5B82E;
+  --gold-deep: #A87708;
+  --ink: #2B1736;
+  --ink-soft: #5A4666;
+  --line: #E8D5B0;
+
+  --font-display: 'Bagel Fat One', 'Arial Rounded MT Bold', 'Trebuchet MS', system-ui, sans-serif;
+  --font-ui: 'Atkinson Hyperlegible', 'Trebuchet MS', system-ui, sans-serif;
+  --font-read: 'Source Serif 4', Georgia, 'Times New Roman', serif;
+
+  --hud-h: 7rem;
+  color-scheme: light;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--purple);
+  color: var(--cream);
+  font-family: var(--font-ui);
+  font-size: 1.0625rem;
+  line-height: 1.5;
+  padding-inline: 0;
+  background-image:
+    radial-gradient(circle at 12% 8%, rgba(255,46,136,.28), transparent 38%),
+    radial-gradient(circle at 88% 22%, rgba(245,184,46,.16), transparent 34%),
+    radial-gradient(circle at 50% 100%, rgba(210,83,26,.35), transparent 45%);
+  background-attachment: fixed;
+}
+h1, h2, h3 { text-wrap: balance; }
+button { font: inherit; }
+
+/* Focus: a dark ring that reads on cream, plus a gold halo that reads on purple */
+:focus-visible {
+  outline: 3px solid var(--purple);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 6px var(--gold);
+  border-radius: 6px;
+}
+.btn:focus-visible { border-radius: 999px; }
+
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.skip { position: absolute; left: 1rem; top: -4rem; background: var(--gold); color: var(--purple); padding: .6rem 1rem; border-radius: 999px; z-index: 100; font-weight: 700; }
+.skip:focus { top: 1rem; }
+
+.wrap { width: min(100% - 2rem, 62rem); margin-inline: auto; }
+
+/* ---------- Buttons ---------- */
+.btn {
+  --face: var(--pink); --edge: var(--gold-deep); --text: var(--purple);
+  appearance: none; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; gap: .6rem;
+  padding: .8rem 1.6rem;
+  border: 3px solid var(--purple);
+  border-radius: 999px;
+  background: var(--face); color: var(--text);
+  font-family: var(--font-display); font-size: 1.15rem; letter-spacing: .01em; line-height: 1.1;
+  box-shadow: 0 6px 0 var(--edge);
+  transform: translateY(0);
+  transition: transform .14s ease, box-shadow .14s ease, filter .14s ease;
+  text-decoration: none;
+}
+.btn:hover:not(:disabled) { transform: translateY(-3px) rotate(-1deg); box-shadow: 0 9px 0 var(--edge); filter: brightness(1.05); }
+.btn:active:not(:disabled) { transform: translateY(4px); box-shadow: 0 2px 0 var(--edge); }
+.btn:disabled { cursor: not-allowed; opacity: .55; box-shadow: 0 3px 0 var(--edge); }
+.btn-big { font-size: clamp(1.4rem, 4.5vw, 2rem); padding: 1rem 2.4rem; }
+.btn-cream { --face: var(--cream); --edge: var(--orange); }
+.btn-gold { --face: var(--gold); --edge: var(--pink-deep); }
+.btn-ghost { --face: transparent; --text: var(--cream); --edge: rgba(255,241,214,.35); border-color: var(--cream); font-family: var(--font-ui); font-weight: 700; font-size: 1rem; }
+.btn-sm { padding: .45rem 1rem; font-size: .95rem; box-shadow: 0 4px 0 var(--edge); border-width: 2px; }
+.btn-sm:hover:not(:disabled) { box-shadow: 0 6px 0 var(--edge); }
+.btn-sm:active:not(:disabled) { box-shadow: 0 1px 0 var(--edge); }
+
+/* ---------- Disco furniture ---------- */
+.vinyl {
+  --size: 9rem;
+  width: var(--size); height: var(--size); border-radius: 50%; flex: none; position: relative;
+  background:
+    radial-gradient(circle, var(--paper) 0 3%, transparent 3.5%),
+    radial-gradient(circle, var(--pink) 0 17%, var(--gold) 17.5% 20%, transparent 20.5%),
+    repeating-radial-gradient(circle, #1b0833 0 2px, #2f1257 3px 4px);
+  box-shadow: 0 8px 24px rgba(0,0,0,.4), inset 0 0 0 3px #0f0420;
+  animation: spin 14s linear infinite;
+}
+.vinyl::after {
+  content: ""; position: absolute; inset: 0; border-radius: 50%;
+  background: conic-gradient(from 20deg, transparent 0 10%, rgba(255,255,255,.22) 14%, transparent 20% 60%, rgba(255,255,255,.16) 66%, transparent 72%);
+}
+.vinyl.mini { --size: 1.8rem; box-shadow: none; animation-duration: 6s; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.discoball-rig { display: flex; flex-direction: column; align-items: center; transform-origin: top center; animation: sway 6s ease-in-out infinite; }
+.discoball-rig .string { width: 2px; height: 3.5rem; background: linear-gradient(var(--gold), var(--cream)); }
+.discoball {
+  --size: 7rem;
+  width: var(--size); height: var(--size); border-radius: 50%; position: relative; overflow: hidden;
+  background:
+    radial-gradient(circle at 32% 28%, #fff 0 3%, rgba(255,255,255,0) 22%),
+    repeating-linear-gradient(0deg, rgba(42,14,74,.45) 0 1px, transparent 1px 11px),
+    repeating-linear-gradient(90deg, rgba(42,14,74,.45) 0 1px, transparent 1px 11px),
+    radial-gradient(circle at 50% 50%, #f3ecfb, #a592c9 58%, #3a1f66);
+  box-shadow: 0 0 40px rgba(255,46,136,.5), 0 0 90px rgba(245,184,46,.25);
+}
+.discoball::after {
+  content: ""; position: absolute; inset: -50%;
+  background: conic-gradient(from 0deg, transparent 0 8%, rgba(255,46,136,.55) 12%, transparent 18% 40%, rgba(245,184,46,.6) 46%, transparent 52% 78%, rgba(255,255,255,.55) 83%, transparent 88%);
+  mix-blend-mode: overlay; animation: spin 9s linear infinite;
+}
+.discoball.small { --size: 4.5rem; }
+@keyframes sway { 0%, 100% { transform: rotate(-3deg); } 50% { transform: rotate(3deg); } }
+
+.waves { position: absolute; inset-inline: 0; bottom: -1px; height: 3.6rem; pointer-events: none; }
+.waves svg { position: absolute; inset-inline: 0; bottom: 0; width: 100%; height: 100%; }
+.waves .w1 { color: var(--orange); transform: translateY(0); }
+.waves .w2 { color: var(--pink); height: 78%; }
+.waves .w3 { color: var(--gold); height: 52%; }
+.stripes { height: 10px; background: linear-gradient(var(--gold) 0 33%, var(--orange) 33% 66%, var(--pink) 66%); }
+
+/* ---------- Top bar for non-game screens ---------- */
+.topbar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding-block: 1rem; }
+.logo-lockup { display: inline-flex; align-items: center; gap: .6rem; font-family: var(--font-display); font-size: 1.35rem; color: var(--cream); }
+
+/* ---------- Landing ---------- */
+#landing { position: relative; overflow: hidden; min-height: 100vh; display: flex; flex-direction: column; }
+.hero { position: relative; flex: 1; display: grid; place-items: center; text-align: center; padding-block: .25rem 5.2rem; }
+.hero-inner { display: grid; gap: 1.1rem; justify-items: center; max-width: 44rem; }
+.title-main {
+  margin: 0; font-family: var(--font-display); font-weight: 400;
+  font-size: clamp(3.4rem, 14vw, 6.8rem); line-height: .92; letter-spacing: .005em;
+  color: var(--gold);
+  text-shadow: 0 .045em 0 var(--orange), 0 .09em 0 var(--pink), 0 .135em 0 var(--pink-deep), 0 .22em .3em rgba(0,0,0,.45);
+  transform: rotate(-2.5deg);
+}
+.title-main span { display: block; }
+.title-main span + span { margin-left: .7em; }
+.lede { margin: .6rem 0 0; font-size: clamp(1.1rem, 2.6vw, 1.35rem); max-width: 34rem; color: var(--cream); }
+.how { list-style: none; padding: 0; margin: .4rem 0 0; display: grid; gap: .8rem; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; text-align: left; counter-reset: step; }
+.how li {
+  counter-increment: step; background: rgba(255,241,214,.1); border: 2px solid rgba(255,241,214,.28); border-radius: 1.2rem;
+  padding: .9rem 1rem .9rem 3.2rem; position: relative; font-size: 1rem;
+}
+.how li::before {
+  content: counter(step); position: absolute; left: .8rem; top: .75rem; width: 1.8rem; height: 1.8rem; border-radius: 50%;
+  display: grid; place-items: center; background: var(--gold); color: var(--purple); font-family: var(--font-display); font-size: 1rem;
+}
+.hero .rig-slot { position: absolute; top: 0; right: clamp(.5rem, 8vw, 7rem); }
+.hero .vinyl-slot { position: absolute; left: clamp(-3rem, -2vw, 1rem); bottom: 4.2rem; opacity: .95; }
+.fineprint { font-size: .9rem; color: rgba(255,241,214,.85); }
+.fineprint a { color: var(--gold); }
+
+/* ---------- Setup ---------- */
+.screen-head { padding-block: .5rem 1rem; }
+.h-display { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: clamp(2.2rem, 7vw, 3.6rem); line-height: 1; color: var(--gold); text-shadow: 0 .05em 0 var(--pink-deep), 0 .1em 0 var(--purple-2); }
+.sub { margin: .5rem 0 0; max-width: 40rem; }
+
+.pair { display: grid; grid-template-columns: minmax(0,1fr) auto minmax(0,1fr); gap: 1rem; align-items: stretch; margin-block: 1.2rem; }
+.pair-arrow { align-self: center; font-family: var(--font-display); font-size: 2rem; color: var(--gold); }
+.card {
+  background: var(--paper); color: var(--ink); border: 3px solid var(--purple); border-radius: 1.6rem;
+  box-shadow: 0 8px 0 var(--orange), 0 18px 30px rgba(0,0,0,.35);
+  padding: 1.1rem 1.2rem; display: grid; grid-template-columns: 1fr auto; gap: .3rem 1rem; align-content: start; min-width: 0;
+}
+.card.target { box-shadow: 0 8px 0 var(--pink), 0 18px 30px rgba(0,0,0,.35); }
+.card-kind { grid-column: 1 / -1; margin: 0; font-weight: 700; font-size: .95rem; color: var(--pink-deep); }
+.card h3 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: clamp(1.4rem, 3.4vw, 1.9rem); line-height: 1.1; color: var(--purple); overflow-wrap: anywhere; }
+.card .desc { margin: .2rem 0 0; color: var(--ink-soft); font-size: 1rem; grid-column: 1; }
+.card .thumb { grid-column: 2; grid-row: 2 / span 2; width: 5.5rem; height: 5.5rem; border-radius: 1rem; object-fit: cover; border: 2px solid var(--line); background: var(--cream); }
+.card.is-loading h3 { color: var(--ink-soft); }
+.note { margin: .3rem 0 0; font-size: .92rem; color: var(--ink-soft); grid-column: 1 / -1; }
+
+.tabs { display: inline-flex; gap: .3rem; padding: .3rem; border-radius: 999px; background: rgba(0,0,0,.28); border: 2px solid rgba(255,241,214,.3); }
+.tab { appearance: none; cursor: pointer; border: 0; background: transparent; color: var(--cream); padding: .5rem 1.2rem; border-radius: 999px; font-weight: 700; font-family: var(--font-ui); font-size: 1rem; }
+.tab[aria-selected="true"] { background: var(--gold); color: var(--purple); }
+.setup-actions { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; margin-block: 1.4rem; }
+.setup-status { min-height: 1.5rem; margin: 0 0 .5rem; font-weight: 700; color: var(--gold); }
+.setup-status.err { color: #FFC4DD; }
+
+.custom { margin-top: 1rem; border: 2px dashed rgba(255,241,214,.4); border-radius: 1.4rem; padding: 1rem 1.2rem 1.2rem; }
+.custom legend { padding-inline: .6rem; font-weight: 700; }
+.fields { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 1rem; }
+.field { position: relative; display: grid; gap: .35rem; min-width: 0; }
+.field label { font-weight: 700; }
+.field input {
+  font: inherit; font-size: 1.05rem; padding: .7rem 1rem; border-radius: 999px; border: 3px solid var(--purple); background: var(--paper); color: var(--ink); width: 100%;
+}
+.field input::placeholder { color: #85728f; }
+.field .hint { font-size: .9rem; min-height: 1.3rem; color: var(--cream); }
+.field .hint.err { color: #FFC4DD; }
+.suggest { list-style: none; margin: 0; padding: .3rem; position: absolute; top: 4.6rem; left: 0; right: 0; z-index: 30; background: var(--paper); color: var(--ink); border: 3px solid var(--purple); border-radius: 1.1rem; box-shadow: 0 10px 24px rgba(0,0,0,.4); max-height: 15rem; overflow-y: auto; }
+.suggest li { padding: .5rem .8rem; border-radius: .7rem; cursor: pointer; }
+.suggest li[aria-selected="true"], .suggest li:hover { background: var(--gold); color: var(--purple); }
+
+.rules { margin: 1.6rem 0 0; padding: 0; list-style: none; display: grid; gap: .5rem; font-size: 1rem; }
+.rules li { display: flex; gap: .7rem; align-items: baseline; }
+.rules li::before { content: ""; flex: none; width: .65rem; height: .65rem; border-radius: 50%; background: var(--pink); box-shadow: 0 0 0 3px var(--purple), 0 0 0 5px var(--gold); transform: translateY(-.05rem); }
+
+/* ---------- Game HUD ---------- */
+.hud {
+  position: sticky; top: 0; z-index: 40; background: linear-gradient(var(--purple), #3a1666);
+  color: var(--cream); border-bottom: 0; box-shadow: 0 8px 24px rgba(0,0,0,.35);
+}
+.hud-grid {
+  width: min(100% - 2rem, 76rem); margin-inline: auto; padding-block: .6rem .7rem;
+  display: grid; align-items: center; gap: .5rem 1.2rem;
+  grid-template-columns: auto minmax(0, 1.2fr) minmax(0, 1.2fr) auto auto auto;
+  grid-template-areas: "brand target now time clicks actions";
+}
+.hud-brand { grid-area: brand; display: flex; align-items: center; gap: .5rem; font-family: var(--font-display); font-size: 1.15rem; color: var(--gold); }
+.hud-target { grid-area: target; } .hud-now { grid-area: now; }
+.hud-field { min-width: 0; }
+.hud-label { display: block; font-size: .8rem; font-weight: 700; color: var(--gold); letter-spacing: .03em; }
+.hud-value { display: block; font-weight: 700; font-size: 1.05rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hud-target .hud-value { color: #FFD3E8; }
+.hud-time { grid-area: time; } .hud-clicks { grid-area: clicks; }
+.num { font-family: var(--font-display); font-size: 1.7rem; line-height: 1.05; font-variant-numeric: tabular-nums; min-width: 3.2ch; display: block; }
+.hud-actions { grid-area: actions; display: flex; gap: .5rem; }
+
+/* ---------- Game body ---------- */
+.play { width: min(100% - 2rem, 76rem); margin-inline: auto; padding-block: 1.2rem 3rem; display: grid; gap: 1.2rem; grid-template-columns: minmax(0, 1fr); align-items: start; }
+.route-panel {
+  background: rgba(255,241,214,.1); border: 2px solid rgba(255,241,214,.3); border-radius: 1.3rem; padding: .3rem 1rem .6rem;
+}
+.route-panel summary { cursor: pointer; font-family: var(--font-display); font-size: 1.15rem; color: var(--gold); padding: .6rem 0; }
+.route { list-style: none; counter-reset: hop; margin: .2rem 0 .3rem; padding: 0 0 0 1.6rem; position: relative; display: grid; gap: .55rem; max-height: 26rem; overflow-y: auto; }
+.route::before { content: ""; position: absolute; left: .5rem; top: .6rem; bottom: .6rem; width: 3px; background: repeating-linear-gradient(var(--pink) 0 6px, transparent 6px 10px); }
+.route li { position: relative; font-weight: 700; overflow-wrap: anywhere; line-height: 1.25; }
+.route li::before { content: ""; position: absolute; left: -1.62rem; top: .28rem; width: .8rem; height: .8rem; border-radius: 50%; background: var(--cream); border: 3px solid var(--purple-2); box-shadow: 0 0 0 2px var(--gold); }
+.route li.here { color: var(--gold); }
+.route li.here::before { background: var(--pink); }
+.route li.goal { color: #FFD3E8; font-weight: 400; font-style: italic; }
+.route li.goal::before { background: transparent; border-style: dashed; border-color: var(--pink); box-shadow: none; }
+.route .tag { font-weight: 400; font-size: .85rem; color: rgba(255,241,214,.8); display: block; }
+
+.reader { position: relative; min-width: 0; }
+.banner { background: var(--gold); color: var(--purple); border: 3px solid var(--purple); border-radius: 1.2rem; padding: .8rem 1rem; margin-bottom: 1rem; display: flex; flex-wrap: wrap; gap: .6rem 1rem; align-items: center; font-weight: 700; }
+.banner p { margin: 0; flex: 1 1 18rem; }
+.banner .btn { --face: var(--purple); --text: var(--cream); --edge: var(--pink-deep); border-color: var(--purple); font-family: var(--font-ui); }
+.paper {
+  background: var(--paper); color: var(--ink); border: 3px solid var(--purple); border-radius: 1.6rem;
+  box-shadow: 0 10px 0 var(--orange), 0 22px 40px rgba(0,0,0,.35);
+  padding: clamp(1.1rem, 4vw, 2.6rem); min-height: 24rem; position: relative; overflow: hidden;
+}
+.paper.busy { cursor: progress; }
+.paper.busy .wb-article { opacity: .45; transition: opacity .2s; }
+.loader { position: absolute; top: 1rem; right: 1rem; display: none; align-items: center; gap: .6rem; background: var(--purple); color: var(--cream); padding: .4rem .9rem .4rem .5rem; border-radius: 999px; font-weight: 700; font-size: .95rem; z-index: 5; }
+.paper.busy .loader { display: inline-flex; }
+.paper.first-load .loader { position: static; display: inline-flex; margin-bottom: 1rem; }
+
+.wb-article { font-family: var(--font-read); font-size: 1.1875rem; line-height: 1.72; color: var(--ink); overflow-wrap: break-word; }
+.wb-article h1.article-title { margin: 0 0 1rem; font-family: var(--font-display); font-weight: 400; font-size: clamp(2rem, 5.5vw, 3rem); line-height: 1.05; color: var(--purple); scroll-margin-top: calc(var(--hud-h) + 1rem); }
+.wb-article h1.article-title:focus { outline: none; box-shadow: none; }
+.wb-article h2, .wb-article h3, .wb-article h4 { font-family: var(--font-ui); font-weight: 700; line-height: 1.2; color: var(--purple); scroll-margin-top: calc(var(--hud-h) + 1rem); }
+.wb-article h2 { font-size: 1.65rem; margin: 2.2rem 0 .8rem; padding-bottom: .3rem; border-bottom: 3px solid var(--line); clear: both; }
+.wb-article h3 { font-size: 1.3rem; margin: 1.6rem 0 .5rem; }
+.wb-article h4 { font-size: 1.1rem; margin: 1.3rem 0 .4rem; }
+.wb-article p { margin: 0 0 1.1rem; max-width: 46rem; }
+.wb-article ul, .wb-article ol { margin: 0 0 1.1rem; padding-left: 1.6rem; max-width: 46rem; }
+.wb-article li { margin-bottom: .3rem; }
+.wb-article blockquote { margin: 1rem 0; padding: .2rem 1.2rem; border-left: 5px solid var(--pink); background: #FFF3DD; max-width: 46rem; }
+.wb-article .hatnote { font-style: italic; color: var(--ink-soft); padding-left: 1.2rem; margin: 0 0 1rem; font-size: 1.05rem; }
+.wb-article [id] { scroll-margin-top: calc(var(--hud-h) + 1rem); }
+.wb-article img { max-width: 100%; height: auto; border-radius: 6px; }
+.wb-article figure { margin: 1rem 0; }
+.wb-article figcaption, .wb-article .thumbcaption { font-family: var(--font-ui); font-size: .95rem; color: var(--ink-soft); line-height: 1.4; margin-top: .35rem; }
+.wb-article figure.mw-halign-right, .wb-article .tright { float: right; clear: right; margin: .3rem 0 1rem 1.4rem; max-width: min(42%, 22rem); }
+.wb-article figure.mw-halign-left, .wb-article .tleft { float: left; clear: left; margin: .3rem 1.4rem 1rem 0; max-width: min(42%, 22rem); }
+.wb-article figure.mw-halign-center, .wb-article figure.mw-halign-none { margin-inline: auto; }
+.wb-article .gallery { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: 1rem; max-width: none; }
+.wb-article .gallerybox { flex: 1 1 10rem; max-width: 14rem; font-family: var(--font-ui); font-size: .9rem; }
+.wb-article .wb-tablewrap { overflow-x: auto; margin: 1rem 0 1.4rem; max-width: 100%; font-family: var(--font-ui); font-size: .95rem; line-height: 1.45; clear: both; }
+.wb-article .wb-tablewrap.wb-infobox { float: right; clear: right; width: min(100%, 21rem); margin: .3rem 0 1.2rem 1.5rem; font-size: .92rem; background: #FFF3DD; border: 2px solid var(--line); border-radius: 1rem; }
+.wb-article table { border-collapse: collapse; width: 100%; }
+.wb-article th, .wb-article td { padding: .4rem .6rem; vertical-align: top; text-align: left; }
+.wb-article .infobox th, .wb-article .infobox td { border-bottom: 1px solid var(--line); }
+.wb-article .infobox-above, .wb-article .infobox-title, .wb-article .infobox-header { text-align: center; font-weight: 700; background: #FFE6B3; }
+.wb-article .infobox-image, .wb-article .infobox-caption { text-align: center; }
+.wb-article .wikitable { border: 1px solid #cdb78e; }
+.wb-article .wikitable th, .wb-article .wikitable td { border: 1px solid #dcc9a4; }
+.wb-article .wikitable th { background: #FFE9BD; }
+.wb-article .mw-heading { clear: both; }
+.wb-article .mw-heading h2 { margin-top: 2.2rem; }
+
+.wb-link { color: var(--orange-text); font-weight: 600; text-decoration: underline; text-decoration-thickness: 2px; text-decoration-color: var(--pink); text-underline-offset: 3px; cursor: pointer; border-radius: 3px; transition: background-color .12s; }
+.wb-link:hover { background: #FFE3A8; text-decoration-color: var(--orange); }
+.wb-off { color: inherit; cursor: not-allowed; text-decoration: none; }
+.wb-article a.wb-anchor { cursor: pointer; text-decoration: underline dotted; color: var(--purple-3); }
+
+.attrib { margin-top: 2.4rem; padding-top: 1.2rem; border-top: 3px dashed var(--line); font-family: var(--font-ui); font-size: .95rem; color: var(--ink-soft); line-height: 1.5; clear: both; max-width: 46rem; }
+.attrib a { color: var(--orange-text); font-weight: 700; }
+
+.errbox { font-family: var(--font-ui); max-width: 34rem; }
+.errbox h2 { font-family: var(--font-display); font-weight: 400; color: var(--purple); font-size: 1.8rem; margin: 0 0 .5rem; }
+.errbox .row { display: flex; flex-wrap: wrap; gap: .8rem; margin-top: 1rem; }
+
+/* ---------- Results ---------- */
+#results { position: relative; overflow: hidden; }
+.res-hero { display: grid; justify-items: center; text-align: center; padding-block: 0 1.2rem; gap: .6rem; }
+.wave-title { margin: .6rem 0 0; font-family: var(--font-display); font-weight: 400; font-size: clamp(3rem, 12vw, 6.5rem); line-height: 1; color: var(--gold); text-shadow: 0 .05em 0 var(--orange), 0 .1em 0 var(--pink), 0 .2em .3em rgba(0,0,0,.4); }
+.wave-title span { display: inline-block; animation: bob 1.5s ease-in-out infinite; animation-delay: calc(var(--i) * 70ms); white-space: pre; }
+@keyframes bob { 0%, 100% { transform: translateY(0) rotate(0); } 50% { transform: translateY(-.12em) rotate(-3deg); } }
+.res-sub { margin: 0; font-size: 1.2rem; max-width: 34rem; }
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin-block: 1rem; max-width: 34rem; margin-inline: auto; width: 100%; }
+.stat { background: var(--paper); color: var(--ink); border: 3px solid var(--purple); border-radius: 1.4rem; padding: .8rem 1rem; text-align: center; box-shadow: 0 6px 0 var(--pink); }
+.stat .k { display: block; font-weight: 700; color: var(--pink-deep); }
+.stat .v { display: block; font-family: var(--font-display); font-size: clamp(2rem, 8vw, 3rem); color: var(--purple); line-height: 1.1; }
+.res-route { max-width: 38rem; margin: 1rem auto 0; background: rgba(255,241,214,.1); border: 2px solid rgba(255,241,214,.3); border-radius: 1.4rem; padding: .4rem 1.2rem 1rem 1.2rem; }
+.res-route h3 { font-family: var(--font-display); font-weight: 400; font-size: 1.4rem; color: var(--gold); margin: .6rem 0; }
+.res-route .route { max-height: none; }
+.res-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 1.2rem; margin-block: 1.8rem 1rem; }
+.confetti-layer { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 60; }
+.conf { position: absolute; top: -12vh; left: var(--x); width: var(--s); height: var(--s); animation: fall var(--d) cubic-bezier(.25,.6,.5,1) forwards; animation-delay: var(--delay); }
+.conf.v { border-radius: 50%; background: radial-gradient(circle, var(--pink) 0 22%, #1b0833 24% 100%); box-shadow: inset 0 0 0 2px var(--gold); }
+.conf.s { background: var(--gold); clip-path: polygon(50% 0, 62% 36%, 100% 38%, 70% 60%, 80% 100%, 50% 76%, 20% 100%, 30% 60%, 0 38%, 38% 36%); }
+.conf.d { background: var(--pink); transform: rotate(45deg); border-radius: 3px; }
+.conf.o { background: var(--orange); border-radius: 50% 50% 50% 0; }
+@keyframes fall { 0% { transform: translate3d(0, 0, 0) rotate(0); opacity: 1; } 85% { opacity: 1; } 100% { transform: translate3d(var(--drift), 118vh, 0) rotate(var(--r)); opacity: 0; } }
+
+/* ---------- Dialog, toast, misc ---------- */
+dialog { border: 3px solid var(--purple); border-radius: 1.6rem; padding: 1.4rem 1.6rem; background: var(--paper); color: var(--ink); max-width: min(30rem, calc(100vw - 2rem)); box-shadow: 0 10px 0 var(--pink), 0 30px 60px rgba(0,0,0,.5); }
+dialog::backdrop { background: rgba(20,5,40,.7); }
+dialog h2 { margin: 0 0 .5rem; font-family: var(--font-display); font-weight: 400; color: var(--purple); font-size: 1.7rem; }
+dialog p { margin: 0 0 1.2rem; }
+.dialog-actions { display: flex; flex-wrap: wrap; gap: .8rem; }
+.dialog-actions .btn { font-size: 1.05rem; padding: .6rem 1.3rem; }
+.toast { position: fixed; left: 50%; bottom: calc(1.2rem + env(safe-area-inset-bottom, 0px)); transform: translate(-50%, 1.2rem); opacity: 0; visibility: hidden; background: var(--cream); color: var(--purple); border: 3px solid var(--purple); box-shadow: 0 5px 0 var(--pink); border-radius: 999px; padding: .6rem 1.2rem; font-weight: 700; max-width: calc(100vw - 2rem); text-align: center; z-index: 80; transition: transform .25s ease, opacity .25s ease, visibility 0s linear .25s; }
+.toast.on { transform: translate(-50%, 0); opacity: 1; visibility: visible; transition: transform .25s ease, opacity .25s ease, visibility 0s; }
+footer.site { padding-block: 2rem 3rem; font-size: .92rem; color: rgba(255,241,214,.88); }
+footer.site a { color: var(--gold); }
+
+/* ---------- Responsive ---------- */
+@media (min-width: 1080px) {
+  .play { grid-template-columns: minmax(0, 1fr) 16.5rem; }
+  .route-panel { order: 2; position: sticky; top: calc(var(--hud-h) + 1rem); }
+  .route-panel summary { pointer-events: none; list-style: none; }
+  .route-panel summary::-webkit-details-marker { display: none; }
+  .route { max-height: calc(100vh - var(--hud-h) - 9rem); }
+}
+@media (max-width: 800px) {
+  .how { grid-template-columns: 1fr; }
+  .pair { grid-template-columns: minmax(0,1fr); }
+  .pair-arrow { transform: rotate(90deg); justify-self: center; }
+  .fields { grid-template-columns: minmax(0, 1fr); }
+  .hero .vinyl-slot { display: none; }
+}
+@media (max-width: 760px) {
+  .hud-grid {
+    grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+    grid-template-areas: "target target target target target" "now now now now now" "time clicks . actions actions";
+    gap: .15rem .9rem; padding-block: .45rem .55rem;
+  }
+  .hud-brand { display: none; }
+  .hud-field { display: flex; align-items: baseline; gap: .5rem; }
+  .hud-target .hud-label, .hud-now .hud-label { flex: none; min-width: 5.2rem; }
+  .hud-value { font-size: 1rem; }
+  .num { font-size: 1.35rem; }
+  .hud-time, .hud-clicks { display: block; }
+  .hud-time .hud-label, .hud-clicks .hud-label { font-size: .75rem; }
+  .wb-article { font-size: 1.125rem; }
+  .wb-article figure.mw-halign-right, .wb-article figure.mw-halign-left, .wb-article .tright, .wb-article .tleft { float: none; margin: 1rem auto; max-width: 100%; }
+  .wb-article .wb-tablewrap.wb-infobox { float: none; width: 100%; margin: 1rem 0 1.4rem; }
+  .paper { border-radius: 1.2rem; }
+}
+@media (max-width: 420px) {
+  .btn-big { padding: .9rem 1.6rem; }
+  .topbar .logo-lockup span.txt { display: none; }
+}
+
+/* ---------- Reduced motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+  .btn:hover:not(:disabled) { transform: none; }
+  .confetti-layer { display: none; }
+}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<!-- shared decorative wave shape -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <symbol id="wavy" viewBox="0 0 1200 40" preserveAspectRatio="none">
+      <path d="M0 22 Q75 -8 150 22 T300 22 T450 22 T600 22 T750 22 T900 22 T1050 22 T1200 22 V40 H0Z" fill="currentColor"/>
+    </symbol>
+  </defs>
+</svg>
+
+<div class="sr-only" id="announcer" aria-live="polite" role="status"></div>
+<div class="confetti-layer" id="confetti" aria-hidden="true"></div>
+
+<main id="main">
+
+  <!-- ===================== LANDING ===================== -->
+  <section id="landing" aria-labelledby="landing-title">
+    <div class="wrap topbar">
+      <span class="logo-lockup"><span class="vinyl mini" aria-hidden="true"></span><span class="txt">Wiki Boogie</span></span>
+      <button class="btn btn-ghost btn-sm sound-toggle" type="button" aria-pressed="false">Sound: off</button>
+    </div>
+    <div class="hero">
+      <div class="rig-slot" aria-hidden="true"><div class="discoball-rig"><div class="string"></div><div class="discoball"></div></div></div>
+      <div class="vinyl-slot" aria-hidden="true"><div class="vinyl" style="--size: 13rem"></div></div>
+      <div class="wrap hero-inner">
+        <h1 class="title-main" id="landing-title"><span>Wiki</span><span>Boogie</span></h1>
+        <p class="lede">Hop from one Wikipedia article to another using only the links inside each page. Reach the target in as few clicks and as little time as you can.</p>
+        <ol class="how">
+          <li>You get a starting article and a target article.</li>
+          <li>Click links inside the article you are reading. No search box.</li>
+          <li>Land on the target. Your time, clicks and route are your score.</li>
+        </ol>
+        <button class="btn btn-big" id="lets-boogie" type="button">Let’s Boogie</button>
+        <p class="fineprint">Articles load live from Wikipedia and are shared under <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener noreferrer">CC BY-SA 4.0</a>.</p>
+      </div>
+      <div class="waves" aria-hidden="true">
+        <svg class="w1"><use href="#wavy"/></svg><svg class="w2"><use href="#wavy"/></svg><svg class="w3"><use href="#wavy"/></svg>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== SETUP ===================== -->
+  <section id="setup" hidden aria-labelledby="setup-title">
+    <div class="wrap topbar">
+      <span class="logo-lockup"><span class="vinyl mini" aria-hidden="true"></span><span class="txt">Wiki Boogie</span></span>
+      <button class="btn btn-ghost btn-sm sound-toggle" type="button" aria-pressed="false">Sound: off</button>
+    </div>
+    <div class="wrap">
+      <div class="screen-head">
+        <h2 class="h-display" id="setup-title" tabindex="-1">Tonight’s route</h2>
+        <p class="sub">Start at the first article and find your way to the second. Wiki Boogie doesn’t check that a route exists, so give up any time a round feels stuck.</p>
+      </div>
+
+      <div class="tabs" role="tablist" aria-label="Game mode">
+        <button class="tab" role="tab" id="tab-random" aria-selected="true" aria-controls="panel-custom-note" type="button">Random</button>
+        <button class="tab" role="tab" id="tab-custom" aria-selected="false" aria-controls="panel-custom" type="button">Custom</button>
+      </div>
+
+      <div class="pair" aria-live="polite">
+        <article class="card" id="card-start" aria-label="Starting article">
+          <p class="card-kind">Start here</p><h3 id="start-title">Loading…</h3><p class="desc" id="start-desc"></p><img class="thumb" id="start-thumb" alt="" hidden><p class="note" id="start-note" hidden></p>
+        </article>
+        <div class="pair-arrow" aria-hidden="true">&rarr;</div>
+        <article class="card target" id="card-target" aria-label="Target article">
+          <p class="card-kind">Get to</p><h3 id="target-title">Loading…</h3><p class="desc" id="target-desc"></p><img class="thumb" id="target-thumb" alt="" hidden><p class="note" id="target-note" hidden></p>
+        </article>
+      </div>
+
+      <fieldset class="custom" id="panel-custom" hidden>
+        <legend>Pick your own articles</legend>
+        <div class="fields">
+          <div class="field">
+            <label for="in-start">Starting article</label>
+            <input id="in-start" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="sug-start" autocomplete="off" spellcheck="false" placeholder="Search Wikipedia titles">
+            <ul class="suggest" id="sug-start" role="listbox" hidden></ul>
+            <div class="hint" id="hint-start" aria-live="polite"></div>
+          </div>
+          <div class="field">
+            <label for="in-target">Target article</label>
+            <input id="in-target" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="sug-target" autocomplete="off" spellcheck="false" placeholder="Search Wikipedia titles">
+            <ul class="suggest" id="sug-target" role="listbox" hidden></ul>
+            <div class="hint" id="hint-target" aria-live="polite"></div>
+          </div>
+        </div>
+        <p class="note" style="color:var(--cream)">Searching is only available here, before the round starts. Pick a suggestion or type an exact title and press Enter.</p>
+      </fieldset>
+
+      <p class="setup-status" id="setup-status" role="status"></p>
+      <div class="setup-actions">
+        <button class="btn btn-big" id="start-round" type="button" disabled>Start round</button>
+        <button class="btn btn-cream" id="reroll" type="button">Roll a new pair</button>
+      </div>
+
+      <ul class="rules">
+        <li>Click only links inside the article you are reading.</li>
+        <li>Search, the address bar and the back button won’t help you here.</li>
+        <li>Each new article you reach counts as one click. Section links don’t.</li>
+        <li>The clock starts when the first article appears.</li>
+      </ul>
+    </div>
+    <footer class="site wrap">Articles and images come live from Wikipedia and are shared under <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener noreferrer">CC BY-SA 4.0</a>. Some images have their own licenses on Wikimedia Commons. Wiki Boogie is a fan project and isn’t affiliated with the Wikimedia Foundation.</footer>
+  </section>
+
+  <!-- ===================== GAME ===================== -->
+  <section id="game" hidden aria-label="Round in progress">
+    <header class="hud" id="hud">
+      <div class="stripes" aria-hidden="true"></div>
+      <div class="hud-grid">
+        <div class="hud-brand" aria-hidden="true"><span class="vinyl mini"></span>Wiki Boogie</div>
+        <div class="hud-field hud-target"><span class="hud-label">Target</span><span class="hud-value" id="hud-target"></span></div>
+        <div class="hud-field hud-now"><span class="hud-label">Now reading</span><span class="hud-value" id="hud-now"></span></div>
+        <div class="hud-field hud-time"><span class="hud-label">Time</span><span class="num" id="hud-time" role="timer" aria-live="off">0:00</span></div>
+        <div class="hud-field hud-clicks"><span class="hud-label">Clicks</span><span class="num" id="hud-clicks">0</span></div>
+        <div class="hud-actions">
+          <button class="btn btn-ghost btn-sm sound-toggle" type="button" aria-pressed="false">Sound: off</button>
+          <button class="btn btn-gold btn-sm" id="give-up" type="button">Give up</button>
+        </div>
+      </div>
+    </header>
+
+    <div class="play">
+      <details class="route-panel" id="route-panel">
+        <summary id="route-summary">Your route</summary>
+        <ol class="route" id="route"></ol>
+      </details>
+
+      <div class="reader">
+        <div class="banner" id="banner" role="alert" hidden>
+          <p id="banner-text"></p>
+          <button class="btn btn-sm" id="banner-retry" type="button">Try again</button>
+          <button class="btn btn-sm btn-ghost" id="banner-dismiss" type="button" style="--text:var(--purple); border-color: var(--purple)">Dismiss</button>
+        </div>
+        <div class="paper" id="paper" aria-busy="false">
+          <div class="loader" id="loader" role="status"><span class="vinyl mini" aria-hidden="true"></span><span id="loader-text">Loading…</span></div>
+          <div id="article-host"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== RESULTS ===================== -->
+  <section id="results" hidden aria-labelledby="res-title">
+    <div class="wrap topbar">
+      <span class="logo-lockup"><span class="vinyl mini" aria-hidden="true"></span><span class="txt">Wiki Boogie</span></span>
+      <button class="btn btn-ghost btn-sm sound-toggle" type="button" aria-pressed="false">Sound: off</button>
+    </div>
+    <div class="wrap">
+      <div class="res-hero">
+        <div class="discoball-rig" aria-hidden="true"><div class="string" style="height:2.2rem"></div><div class="discoball small"></div></div>
+        <h2 class="wave-title" id="res-title" tabindex="-1"></h2>
+        <p class="res-sub" id="res-sub"></p>
+      </div>
+      <div class="stats">
+        <div class="stat"><span class="k">Time</span><span class="v" id="res-time">0:00.0</span></div>
+        <div class="stat"><span class="k">Clicks</span><span class="v" id="res-clicks">0</span></div>
+      </div>
+      <div class="res-route">
+        <h3>Your route</h3>
+        <ol class="route" id="res-route"></ol>
+      </div>
+      <div class="res-actions">
+        <button class="btn btn-big" id="play-again" type="button">Play again</button>
+        <button class="btn btn-cream" id="replay-same" type="button">Same pair again</button>
+        <button class="btn btn-ghost" id="copy-result" type="button">Copy result</button>
+      </div>
+      <footer class="site">Article titles and text come from Wikipedia under <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener noreferrer">CC BY-SA 4.0</a>.</footer>
+    </div>
+  </section>
+</main>
+
+<dialog id="giveup-dialog" aria-labelledby="gu-title">
+  <h2 id="gu-title">Give up this round?</h2>
+  <p>Your clock and route will stop here and you won’t reach the target. The round can’t be resumed.</p>
+  <div class="dialog-actions">
+    <button class="btn btn-cream" id="gu-keep" type="button" autofocus>Keep playing</button>
+    <button class="btn btn-gold" id="gu-confirm" type="button">Give up</button>
+  </div>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<noscript><p style="padding:1rem">Wiki Boogie needs JavaScript to load Wikipedia articles.</p></noscript>
+
+<script>
+(() => {
+'use strict';
+
+/* =========================================================
+   Wikipedia access: MediaWiki Action API on en.wikipedia.org
+   - Anonymous cross-origin reads use origin=*
+   - Requests are made one at a time to stay polite
+   ========================================================= */
+const WIKI = 'https://en.wikipedia.org';
+const API = WIKI + '/w/api.php';
+const MIN_LENGTH = 15000;             // bytes of wikitext; filters out stubs for random rounds
+const MIN_BACKLINKS = 8;              // a random target should have several articles linking to it
+const LIST_RE = /^(Lists?|Index|Outline|Glossary|Timeline|Bibliography) of /i;
+
+const NAMESPACES = new Set([
+  'talk','user','user talk','wikipedia','wikipedia talk','project','project talk','wp','wt','file','file talk','image','image talk',
+  'mediawiki','mediawiki talk','template','template talk','help','help talk','category','category talk','portal','portal talk',
+  'draft','draft talk','module','module talk','timedtext','timedtext talk','topic','special','media','gadget','gadget talk',
+  'gadget definition','gadget definition talk','h','p','t','cat','mos','mp','wikt','commons','c','wikipedia:'
+]);
+
+class WikiError extends Error {
+  constructor(code, message, retryable) { super(message); this.code = code; this.retryable = !!retryable; }
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+async function api(params, { timeout = 20000, retries = 1 } = {}) {
+  const qs = new URLSearchParams({ format: 'json', formatversion: '2', origin: '*', ...params });
+  const url = `${API}?${qs}`;
+  let last;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), timeout);
+    try {
+      const res = await fetch(url, { signal: ctl.signal });
+      if (res.status === 429) throw new WikiError('ratelimited', 'Wikipedia asked for a short break. Wait a few seconds and try again.', true);
+      if (!res.ok) throw new WikiError('http' + res.status, `Wikipedia answered with an error (${res.status}).`, res.status >= 500);
+      const data = await res.json();
+      if (data && data.error) throw new WikiError(data.error.code || 'apierror', data.error.info || 'Wikipedia returned an error.', false);
+      return data;
+    } catch (e) {
+      last = e instanceof WikiError ? e
+        : e && e.name === 'AbortError' ? new WikiError('timeout', 'Wikipedia took too long to answer.', true)
+        : new WikiError('network', 'Couldn’t reach Wikipedia. If you’re viewing this inside a preview window, download the file and open it in your browser, or host it as a website. Otherwise check your connection and any ad blocker or content filter.', true);
+      if (!last.retryable || attempt === retries) break;
+      await sleep(700 * (attempt + 1));
+    } finally { clearTimeout(timer); }
+  }
+  throw last;
+}
+
+const safeDecode = s => { try { return decodeURIComponent(s); } catch { return s; } };
+const normTitle = t => String(t).replace(/_/g, ' ').trim();
+
+function hasNamespacePrefix(title) {
+  const m = /^([^:]+):/.exec(title);
+  return !!(m && NAMESPACES.has(m[1].trim().toLowerCase()));
+}
+
+/* Decide what an <a href> in article HTML may do. */
+function classifyHref(raw) {
+  if (!raw) return { type: 'blocked', reason: 'This link has no destination' };
+  if (raw[0] === '#') {
+    const id = safeDecode(raw.slice(1));
+    return id ? { type: 'anchor', id } : { type: 'blocked', reason: 'This link has no destination' };
+  }
+  let u;
+  try { u = new URL(raw, WIKI + '/wiki/'); } catch { return { type: 'blocked', reason: 'This link isn’t allowed' }; }
+  if (u.origin !== WIKI) return { type: 'blocked', reason: 'External links are turned off' };
+  if (!u.pathname.startsWith('/wiki/')) return { type: 'blocked', reason: 'Only article links are allowed' };
+  if (u.search) return { type: 'blocked', reason: 'Only article links are allowed' };
+  const title = normTitle(safeDecode(u.pathname.slice(6)));
+  if (!title) return { type: 'blocked', reason: 'This link isn’t allowed' };
+  if (hasNamespacePrefix(title)) return { type: 'blocked', reason: 'Only article pages are allowed' };
+  return { type: 'article', title, hash: u.hash ? safeDecode(u.hash.slice(1)) : '' };
+}
+
+/* =========================================================
+   HTML sanitizer: turns Wikipedia's parsed HTML into safe,
+   readable markup with game-controlled links.
+   ========================================================= */
+const REMOVE_SELECTORS = [
+  '.mw-editsection','sup.reference','.reference','.reflist','.references','.navbox','.navbox-styles','.vertical-navbox',
+  '.mw-authority-control','.authority-control','.catlinks','.printfooter','.ambox','.metadata','.sistersitebox','.side-box',
+  '.mw-empty-elt','.mwe-math-mathml-inline','.mwe-math-mathml-display','.toc','#toc','.shortdescription','.mw-jump-link',
+  '.Inline-Template','.mw-cite-backlink','.error','.noexcerpt','.navigation-not-searchable:not(.hatnote)','.sidebar','.mw-collapsible-toggle'
+].join(',');
+const DROP_TAGS = new Set(['script','style','iframe','object','embed','form','input','button','select','textarea','link','meta','base','svg','math','noscript','template','audio','video','canvas','source','track','dialog','frame','frameset','applet']);
+const ALLOWED_TAGS = new Set(['a','abbr','b','bdi','bdo','big','blockquote','br','caption','center','cite','code','dd','del','dfn','div','dl','dt','em','figcaption','figure','h1','h2','h3','h4','h5','h6','hr','i','img','ins','kbd','li','mark','ol','p','pre','q','rp','rt','ruby','s','samp','small','span','strike','strong','sub','sup','table','tbody','td','tfoot','th','thead','time','tr','tt','u','ul','var','wbr','section','article']);
+const ATTR_ALLOW = {
+  '*': ['class','id','lang','dir','title'],
+  img: ['src','srcset','alt','width','height'],
+  td: ['colspan','rowspan','scope'], th: ['colspan','rowspan','scope'],
+  time: ['datetime'], ol: ['start','reversed','type']
+};
+const DROP_SECTION_IDS = new Set(['References','Notes','Footnotes','External_links','Further_reading','Citations']);
+
+function wikiMediaUrl(src) {
+  try {
+    const u = new URL(src, WIKI);
+    if (u.protocol !== 'https:') return '';
+    const h = u.hostname;
+    if (h === 'wikimedia.org' || h.endsWith('.wikimedia.org') || h === 'wikipedia.org' || h.endsWith('.wikipedia.org')) return u.href;
+  } catch {}
+  return '';
+}
+
+function dropSections(root) {
+  root.querySelectorAll('h2').forEach(h2 => {
+    if (!h2.isConnected || !DROP_SECTION_IDS.has(h2.id)) return;
+    const head = h2.closest('.mw-heading') || h2;
+    const kill = [head];
+    for (let n = head.nextElementSibling; n; n = n.nextElementSibling) {
+      if (n.matches('h2, .mw-heading2') || n.querySelector(':scope > h2')) break;
+      kill.push(n);
+    }
+    kill.forEach(n => n.remove());
+  });
+}
+
+function buildArticle(html, doc = document) {
+  const parsed = new DOMParser().parseFromString(html, 'text/html'); // inert: nothing runs or loads
+  const root = parsed.body;
+  root.querySelectorAll(REMOVE_SELECTORS).forEach(n => n.remove());
+  dropSections(root);
+  const titles = new Set();
+  let anchors = 0, blocked = 0;
+
+  function cleanAttrs(el, tag) {
+    for (const attr of Array.from(el.attributes)) {
+      const name = attr.name.toLowerCase();
+      const ok = (ATTR_ALLOW['*'].includes(name) || (ATTR_ALLOW[tag] || []).includes(name));
+      if (!ok) { el.removeAttribute(attr.name); continue; }
+      if (name === 'class' && !/^[\w\s\-:]*$/.test(attr.value)) el.removeAttribute('class');
+      if (name === 'id') el.setAttribute('id', 'a-' + attr.value);
+    }
+    if (tag === 'img') {
+      const src = wikiMediaUrl(el.getAttribute('src') || '');
+      if (!src) { el.remove(); return false; }
+      el.setAttribute('src', src);
+      const ss = el.getAttribute('srcset');
+      if (ss) {
+        const parts = ss.split(',').map(p => p.trim()).filter(Boolean).map(p => {
+          const [u, d] = p.split(/\s+/); const safe = wikiMediaUrl(u); return safe ? (d ? `${safe} ${d}` : safe) : '';
+        }).filter(Boolean);
+        parts.length ? el.setAttribute('srcset', parts.join(', ')) : el.removeAttribute('srcset');
+      }
+      el.setAttribute('loading', 'lazy'); el.setAttribute('decoding', 'async'); el.setAttribute('referrerpolicy', 'no-referrer');
+      if (!el.hasAttribute('alt')) el.setAttribute('alt', '');
+    }
+    return true;
+  }
+
+  function handleAnchor(a) {
+    const cls = a.getAttribute('class') || '';
+    const wrapsImage = !!a.querySelector('img') || /\b(mw-file-description|image)\b/.test(cls);
+    clean(a);
+    if (wrapsImage) { a.replaceWith(...a.childNodes); return; }
+    let info = classifyHref(a.getAttribute('href'));
+    if (/\b(new|external|extiw|mw-selflink|selflink)\b/.test(cls) && info.type !== 'anchor') {
+      info = { type: 'blocked', reason: /\bnew\b/.test(cls) ? 'This article doesn’t exist yet' : /\bexternal\b/.test(cls) ? 'External links are turned off' : 'This link isn’t available' };
+    }
+    if (info.type === 'article' && info.hash && normTitle(info.title).toLowerCase() === normTitle(currentTitle).toLowerCase()) {
+      info = { type: 'anchor', id: info.hash };
+    }
+    const out = parsed.createElement(info.type === 'blocked' ? 'span' : 'a');
+    out.append(...a.childNodes);
+    if (info.type === 'article') {
+      out.className = 'wb-link'; out.setAttribute('role', 'link'); out.setAttribute('tabindex', '0');
+      out.setAttribute('data-title', info.title); out.setAttribute('title', info.title);
+      titles.add(info.title.toLowerCase());
+    } else if (info.type === 'anchor') {
+      out.className = 'wb-link wb-anchor'; out.setAttribute('role', 'link'); out.setAttribute('tabindex', '0');
+      out.setAttribute('data-anchor', info.id); out.setAttribute('title', 'Jump to this section');
+      anchors++;
+    } else {
+      out.className = 'wb-off'; out.setAttribute('title', info.reason); out.setAttribute('data-off', info.reason);
+      blocked++;
+    }
+    a.replaceWith(out);
+  }
+
+  let currentTitle = '';
+  function clean(node) {
+    for (const child of Array.from(node.childNodes)) {
+      if (child.nodeType === 3) continue;
+      if (child.nodeType !== 1) { child.remove(); continue; }
+      const tag = child.tagName.toLowerCase();
+      if (DROP_TAGS.has(tag)) { child.remove(); continue; }
+      if (tag === 'a') { handleAnchor(child); continue; }
+      if (!ALLOWED_TAGS.has(tag)) { clean(child); child.replaceWith(...child.childNodes); continue; }
+      if (!cleanAttrs(child, tag)) continue;
+      clean(child);
+    }
+  }
+  return {
+    run(title) {
+      currentTitle = title;
+      clean(root);
+      root.querySelectorAll('table').forEach(t => {
+        if (t.parentElement && t.parentElement.classList.contains('wb-tablewrap')) return;
+        const wrap = parsed.createElement('div');
+        wrap.className = 'wb-tablewrap' + (t.classList.contains('infobox') ? ' wb-infobox' : '');
+        t.replaceWith(wrap); wrap.append(t);
+      });
+      return { nodes: Array.from(root.childNodes), links: titles.size, anchors, blocked };
+    }
+  };
+}
+
+/* =========================================================
+   Article + page lookups
+   ========================================================= */
+async function fetchArticle(title) {
+  let d;
+  try {
+    d = await api({ action: 'parse', page: title, redirects: '1', prop: 'text|displaytitle|revid', disableeditsection: '1', disablelimitreport: '1', disabletoc: '1' });
+  } catch (e) {
+    if (e.code === 'missingtitle') throw new WikiError('missingtitle', `“${title}” doesn’t exist on Wikipedia.`, false);
+    if (e.code === 'invalidtitle') throw new WikiError('invalidtitle', `“${title}” isn’t a valid article title.`, false);
+    throw e;
+  }
+  const p = d && d.parse;
+  if (!p || !p.pageid || typeof p.text !== 'string') throw new WikiError('missingtitle', `“${title}” doesn’t exist on Wikipedia.`, false);
+  if (hasNamespacePrefix(p.title)) throw new WikiError('notarticle', `“${p.title}” isn’t a regular article.`, false);
+  const built = buildArticle(p.text).run(p.title);
+  return { pageid: p.pageid, title: p.title, revid: p.revid, built, redirectedFrom: (p.redirects && p.redirects[0] && p.redirects[0].from) || '' };
+}
+
+function toInfo(page) {
+  const pp = page.pageprops || {};
+  return {
+    pageid: page.pageid, title: page.title, ns: page.ns, length: page.length || 0,
+    desc: pp['wikibase-shortdesc'] || '', disambig: Object.prototype.hasOwnProperty.call(pp, 'disambiguation'),
+    thumb: page.thumbnail ? wikiMediaUrl(page.thumbnail.source) : ''
+  };
+}
+const INFO_PROPS = { prop: 'info|pageprops|pageimages', ppprop: 'disambiguation|wikibase-shortdesc', piprop: 'thumbnail', pithumbsize: '200' };
+
+async function resolveTitle(title) {
+  const d = await api({ action: 'query', titles: title, redirects: '1', ...INFO_PROPS });
+  const page = d.query && d.query.pages && d.query.pages[0];
+  if (!page || page.missing || page.invalid || !page.pageid) return { ok: false, reason: 'missing' };
+  const info = toInfo(page);
+  info.redirectedFrom = (d.query.redirects && d.query.redirects[0] && d.query.redirects[0].from) || '';
+  if (info.ns !== 0) return { ok: false, reason: 'namespace' };
+  return { ok: true, info };
+}
+
+async function randomCandidates() {
+  const d = await api({ action: 'query', generator: 'random', grnnamespace: '0', grnlimit: '25', grnfilterredir: 'nonredirects', ...INFO_PROPS });
+  return ((d.query && d.query.pages) || []).map(toInfo)
+    .filter(i => i.ns === 0 && !i.disambig && i.length >= MIN_LENGTH && !LIST_RE.test(i.title));
+}
+async function hasInbound(title) {
+  const d = await api({ action: 'query', list: 'backlinks', bltitle: title, blnamespace: '0', bllimit: String(MIN_BACKLINKS), blfilterredir: 'nonredirects' });
+  return ((d.query && d.query.backlinks) || []).length >= MIN_BACKLINKS;
+}
+async function rollPair() {
+  const pool = new Map();
+  for (let i = 0; i < 8 && pool.size < 4; i++) (await randomCandidates()).forEach(c => pool.set(c.pageid, c));
+  const list = Array.from(pool.values());
+  for (let i = list.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [list[i], list[j]] = [list[j], list[i]]; }
+  if (list.length < 2) throw new WikiError('noroll', 'Couldn’t find a good pair of articles this time.', true);
+  const start = list[0];
+  for (const cand of list.slice(1)) {
+    if (cand.pageid !== start.pageid && await hasInbound(cand.title)) return { start, target: cand };
+  }
+  throw new WikiError('noroll', 'Couldn’t find a good pair of articles this time.', true);
+}
+async function suggest(q) {
+  const d = await api({ action: 'opensearch', search: q, limit: '8', namespace: '0' }, { retries: 0, timeout: 8000 });
+  return Array.isArray(d) && Array.isArray(d[1]) ? d[1] : [];
+}
+
+/* =========================================================
+   UI helpers
+   ========================================================= */
+const $ = id => document.getElementById(id);
+const reduceMotion = () => !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+const SCREENS = ['landing', 'setup', 'game', 'results'];
+const E = {};
+['landing','setup','game','results','lets-boogie','start-round','reroll','tab-random','tab-custom','panel-custom','setup-status',
+ 'hud','hud-target','hud-now','hud-time','hud-clicks','give-up','route','route-panel','route-summary','banner','banner-text','banner-retry','banner-dismiss',
+ 'paper','loader','loader-text','article-host','res-title','res-sub','res-time','res-clicks','res-route','play-again','replay-same','copy-result',
+ 'giveup-dialog','gu-keep','gu-confirm','toast','announcer','confetti','setup-title','in-start','in-target','sug-start','sug-target','hint-start','hint-target'
+].forEach(id => { E[id] = $(id); });
+
+function show(name) {
+  SCREENS.forEach(s => { E[s].hidden = s !== name; });
+  if (name !== 'results') E.confetti.replaceChildren();   // never carry a celebration into the next screen
+  window.scrollTo(0, 0);
+  const focusTarget = { landing: $('landing-title'), setup: E['setup-title'], results: E['res-title'] }[name];
+  if (focusTarget) focusTarget.focus({ preventScroll: true });
+}
+let toastTimer;
+function toast(msg) {
+  E.toast.textContent = msg; E.toast.classList.add('on');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => E.toast.classList.remove('on'), 2800);
+}
+const announce = msg => { E.announcer.textContent = ''; setTimeout(() => { E.announcer.textContent = msg; }, 30); };
+function fmtTime(ms, tenths) {
+  const total = Math.max(0, ms) / 1000; const m = Math.floor(total / 60); const s = Math.floor(total % 60);
+  return `${m}:${String(s).padStart(2, '0')}` + (tenths ? '.' + Math.floor((total * 10) % 10) : '');
+}
+
+/* ---------- Optional sound (off by default, never autoplays) ---------- */
+let soundOn = false, audio = null;
+try { soundOn = localStorage.getItem('wikiBoogieSound') === 'on'; } catch {}
+function ctx() {
+  if (!soundOn) return null;
+  try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); if (audio.state === 'suspended') audio.resume(); return audio; } catch { return null; }
+}
+function tone(freq, at, dur, type = 'triangle', vol = 0.06) {
+  const c = ctx(); if (!c) return;
+  const o = c.createOscillator(), g = c.createGain(), t = c.currentTime + at;
+  o.type = type; o.frequency.value = freq;
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.015); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g); g.connect(c.destination); o.start(t); o.stop(t + dur + 0.05);
+}
+const blip = () => { tone(660, 0, 0.09, 'square', 0.03); tone(990, 0.06, 0.1, 'square', 0.03); };
+const fanfare = () => [523, 659, 784, 1047, 784, 1047, 1319].forEach((f, i) => tone(f, i * 0.1, i === 6 ? 0.7 : 0.2, 'triangle', 0.08));
+function syncSound() {
+  document.querySelectorAll('.sound-toggle').forEach(b => { b.setAttribute('aria-pressed', String(soundOn)); b.textContent = soundOn ? 'Sound: on' : 'Sound: off'; });
+}
+document.querySelectorAll('.sound-toggle').forEach(b => b.addEventListener('click', () => {
+  soundOn = !soundOn; try { localStorage.setItem('wikiBoogieSound', soundOn ? 'on' : 'off'); } catch {}
+  syncSound(); if (soundOn) blip();
+}));
+syncSound();
+
+/* =========================================================
+   Setup screen
+   ========================================================= */
+const setup = { mode: 'random', start: null, target: null, busy: false };
+
+function renderCard(which, info, loadingText) {
+  const card = $('card-' + which);
+  card.classList.toggle('is-loading', !info);
+  $(which + '-title').textContent = info ? info.title : (loadingText || 'Loading…');
+  $(which + '-desc').textContent = info ? (info.desc || 'Wikipedia article') : '';
+  const img = $(which + '-thumb');
+  if (info && info.thumb) { img.src = info.thumb; img.hidden = false; img.referrerPolicy = 'no-referrer'; } else { img.hidden = true; img.removeAttribute('src'); }
+  const note = $(which + '-note');
+  if (info && info.redirectedFrom) { note.hidden = false; note.textContent = `“${info.redirectedFrom}” redirects here.`; } else note.hidden = true;
+}
+function updateStartButton() {
+  E['start-round'].disabled = !(setup.start && setup.target && setup.start.pageid !== setup.target.pageid) || setup.busy;
+}
+function setSetupStatus(msg, isErr) { E['setup-status'].textContent = msg || ''; E['setup-status'].classList.toggle('err', !!isErr); }
+
+async function doRoll() {
+  if (setup.busy) return;
+  setup.busy = true; setup.start = setup.target = null; updateStartButton();
+  E.reroll.disabled = true;
+  renderCard('start', null, 'Finding a starting article…'); renderCard('target', null, 'Finding a target…');
+  setSetupStatus('Rolling the dice on live Wikipedia…');
+  try {
+    const { start, target } = await rollPair();
+    setup.start = start; setup.target = target;
+    renderCard('start', start); renderCard('target', target);
+    E['in-start'].value = start.title; E['in-target'].value = target.title;
+    setSetupStatus('');
+  } catch (e) {
+    renderCard('start', null, 'Couldn’t load'); renderCard('target', null, 'Couldn’t load');
+    setSetupStatus(`${e.message} Press “Roll a new pair” to try again.`, true);
+  } finally {
+    setup.busy = false; E.reroll.disabled = false; updateStartButton();
+  }
+}
+
+function setMode(mode) {
+  setup.mode = mode;
+  E['tab-random'].setAttribute('aria-selected', String(mode === 'random'));
+  E['tab-custom'].setAttribute('aria-selected', String(mode === 'custom'));
+  E['panel-custom'].hidden = mode !== 'custom';
+  E.reroll.textContent = mode === 'custom' ? 'Fill with a random pair' : 'Roll a new pair';
+  setSetupStatus('');
+}
+E['tab-random'].addEventListener('click', () => setMode('random'));
+E['tab-custom'].addEventListener('click', () => { setMode('custom'); E['in-start'].focus(); });
+[E['tab-random'], E['tab-custom']].forEach(t => t.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { const next = t === E['tab-random'] ? E['tab-custom'] : E['tab-random']; next.click(); next.focus(); }
+}));
+
+/* Custom mode: combobox with suggestions, then resolve to a canonical article. */
+function wireCombobox(which) {
+  const input = E['in-' + which], list = E['sug-' + which], hint = E['hint-' + which];
+  let items = [], active = -1, sugSeq = 0, resSeq = 0, timer;
+  const close = () => { list.hidden = true; input.setAttribute('aria-expanded', 'false'); active = -1; input.removeAttribute('aria-activedescendant'); };
+  const setHint = (msg, err) => { hint.textContent = msg || ''; hint.classList.toggle('err', !!err); };
+  function render() {
+    list.replaceChildren(...items.map((t, i) => {
+      const li = document.createElement('li'); li.id = `${which}-opt-${i}`; li.setAttribute('role', 'option'); li.textContent = t;
+      li.setAttribute('aria-selected', String(i === active));
+      li.addEventListener('mousedown', ev => { ev.preventDefault(); choose(t); });
+      return li;
+    }));
+    list.hidden = !items.length; input.setAttribute('aria-expanded', String(!!items.length));
+    if (active >= 0) input.setAttribute('aria-activedescendant', `${which}-opt-${active}`);
+  }
+  async function choose(title) {
+    clearTimeout(timer); sugSeq++;                       // cancel any pending suggestion lookup
+    input.value = title; close(); setHint('Checking…');
+    const mine = ++resSeq;
+    try {
+      const r = await resolveTitle(title);
+      if (mine !== resSeq) return;
+      if (!r.ok) { setHint(r.reason === 'namespace' ? 'That isn’t a regular article. Pick another.' : 'No Wikipedia article has that title. Pick a suggestion.', true); setup[which] = null; renderCard(which, null, 'Pick an article'); updateStartButton(); return; }
+      const other = setup[which === 'start' ? 'target' : 'start'];
+      if (r.info.disambig) { setHint('That’s a disambiguation page. Choose a specific article.', true); setup[which] = null; updateStartButton(); return; }
+      if (other && other.pageid === r.info.pageid) { setHint('Start and target must be different articles.', true); setup[which] = null; updateStartButton(); return; }
+      setup[which] = r.info; input.value = r.info.title; renderCard(which, r.info);
+      setHint(r.info.redirectedFrom ? `“${r.info.redirectedFrom}” redirects to this article.` : 'Ready.');
+      updateStartButton();
+    } catch (e) { if (mine === resSeq) { setHint(e.message, true); } }
+  }
+  input.addEventListener('input', () => {
+    clearTimeout(timer); resSeq++; const q = input.value.trim();   // typing invalidates any in-flight title check
+    setup[which] = null; updateStartButton();
+    if (q.length < 2) { close(); return; }
+    timer = setTimeout(async () => {
+      const mine = ++sugSeq;
+      try { const res = await suggest(q); if (mine !== sugSeq) return; items = res; active = -1; render(); } catch { /* suggestions are optional */ }
+    }, 250);
+  });
+  input.addEventListener('keydown', e => {
+    if (e.key === 'ArrowDown' && items.length) { e.preventDefault(); active = (active + 1) % items.length; render(); }
+    else if (e.key === 'ArrowUp' && items.length) { e.preventDefault(); active = (active - 1 + items.length) % items.length; render(); }
+    else if (e.key === 'Escape') close();
+    else if (e.key === 'Enter') { e.preventDefault(); const pick = active >= 0 ? items[active] : input.value.trim(); if (pick) choose(pick); }
+  });
+  input.addEventListener('blur', () => setTimeout(close, 120));
+}
+wireCombobox('start'); wireCombobox('target');
+
+E['lets-boogie'].addEventListener('click', () => { show('setup'); if (!setup.start && !setup.busy) doRoll(); });
+E.reroll.addEventListener('click', doRoll);
+
+/* =========================================================
+   Round state and gameplay
+   ========================================================= */
+let R = null;           // current round
+let timerHandle = null;
+let lastFailedTitle = null;
+
+function newRound(start, target, mode) {
+  R = { start, target, mode, route: [], clicks: 0, t0: null, tEnd: null, status: 'idle', current: null, seq: 0 };
+}
+const elapsed = () => R && R.t0 != null ? (R.tEnd != null ? R.tEnd : performance.now()) - R.t0 : 0;
+function tick() { E['hud-time'].textContent = fmtTime(elapsed()); }
+function startTimer() { R.t0 = performance.now(); tick(); clearInterval(timerHandle); timerHandle = setInterval(tick, 250); }
+function stopTimer() { R.tEnd = performance.now(); clearInterval(timerHandle); timerHandle = null; tick(); }
+
+function renderRoute(listEl, withGoal) {
+  const items = R.route.map((r, i) => {
+    const li = document.createElement('li');
+    li.textContent = r.title;
+    if (i === 0) { const t = document.createElement('span'); t.className = 'tag'; t.textContent = 'Start'; li.append(t); }
+    if (withGoal && i === R.route.length - 1 && R.status === 'playing') { li.classList.add('here'); li.setAttribute('aria-current', 'step'); }
+    return li;
+  });
+  if (withGoal && R.status !== 'won') {
+    const g = document.createElement('li'); g.className = 'goal'; g.textContent = R.target.title; const t = document.createElement('span'); t.className = 'tag'; t.textContent = 'Target'; g.append(t); items.push(g);
+  }
+  listEl.replaceChildren(...items);
+  if (withGoal) listEl.scrollTop = listEl.scrollHeight;
+}
+function updateHud() {
+  E['hud-target'].textContent = R.target.title;
+  E['hud-now'].textContent = R.current ? R.current.title : 'Loading…';
+  E['hud-clicks'].textContent = String(R.clicks);
+  E['route-summary'].textContent = `Your route (${R.route.length} article${R.route.length === 1 ? '' : 's'})`;
+  renderRoute(E.route, true);
+}
+
+function setBusy(on, label) {
+  E.paper.classList.toggle('busy', on); E.paper.setAttribute('aria-busy', String(on));
+  E['loader-text'].textContent = label || 'Loading…';
+}
+function hideBanner() { E.banner.hidden = true; }
+function showBanner(err, title) {
+  lastFailedTitle = err.retryable || err.code === 'network' ? title : null;
+  E['banner-text'].textContent = `${err.message} You’re still on “${R.current.title}” and no click was counted.`;
+  E['banner-retry'].hidden = !lastFailedTitle;
+  E.banner.hidden = false;
+}
+
+function renderArticle(data) {
+  const host = E['article-host'];
+  const art = document.createElement('article'); art.className = 'wb-article';
+  const h1 = document.createElement('h1'); h1.className = 'article-title'; h1.tabIndex = -1; h1.textContent = data.title;
+  const body = document.createElement('div'); body.className = 'wb-body';
+  body.append(...data.built.nodes);
+  const att = document.createElement('footer'); att.className = 'attrib';
+  const p = document.createElement('p');
+  p.append('Text from Wikipedia, the free encyclopedia, shared under ');
+  const lic = document.createElement('a'); lic.href = 'https://creativecommons.org/licenses/by-sa/4.0/'; lic.target = '_blank'; lic.rel = 'noopener noreferrer'; lic.textContent = 'CC BY-SA 4.0'; p.append(lic);
+  p.append('. Images and media come from Wikipedia and Wikimedia Commons and may have their own licenses. ');
+  const src = document.createElement('a');
+  src.href = `${WIKI}/w/index.php?title=${encodeURIComponent(data.title.replace(/ /g, '_'))}&action=history`;
+  src.target = '_blank'; src.rel = 'noopener noreferrer';
+  src.textContent = 'See who wrote this article on Wikipedia';
+  p.append(src); p.append(' (opens a new tab and leaves the game).');
+  att.append(p);
+  art.append(h1, body, att);
+  host.replaceChildren(art);
+  E.paper.classList.remove('first-load');
+  return h1;
+}
+function scrollToReader(h1) {
+  const hudH = E.hud.offsetHeight || 112;
+  const top = E.paper.getBoundingClientRect().top + window.scrollY - hudH - 12;
+  window.scrollTo(0, Math.max(0, top));
+  if (h1) h1.focus({ preventScroll: true });
+}
+
+/* ----- start the round ----- */
+function startRound() {
+  if (!setup.start || !setup.target || setup.busy) return;
+  newRound(setup.start, setup.target, setup.mode);
+  E['hud-time'].textContent = '0:00';
+  E['hud-clicks'].textContent = '0';
+  E['hud-target'].textContent = R.target.title; E['hud-now'].textContent = 'Loading…';
+  E.route.replaceChildren(); E['route-summary'].textContent = 'Your route';
+  hideBanner(); E['article-host'].replaceChildren();
+  show('game'); armGuards(); syncRouteOpen();
+  loadStart();
+}
+async function loadStart() {
+  const seq = ++R.seq; R.status = 'loading';
+  E.paper.classList.add('first-load'); setBusy(true, `Loading “${R.start.title}”…`);
+  E['article-host'].replaceChildren();
+  let data;
+  try { data = await fetchArticle(R.start.title); }
+  catch (e) { if (seq !== R.seq) return; showStartError(e); return; }
+  if (seq !== R.seq) return;
+  if (data.built.links < 1) { showStartError(new WikiError('nolinks', 'This starting article has no playable links.', false)); return; }
+  R.current = { pageid: data.pageid, title: data.title };
+  R.route = [{ pageid: data.pageid, title: data.title }];
+  R.status = 'playing';
+  const h1 = renderArticle(data); setBusy(false);
+  startTimer();                          // the clock starts once the first article is on screen
+  updateHud(); announce(`Round started. You are reading ${data.title}. Your target is ${R.target.title}.`);
+  scrollToReader(h1);
+}
+function showStartError(e) {
+  R.status = 'idle'; setBusy(false); E.paper.classList.remove('first-load');
+  const box = document.createElement('div'); box.className = 'errbox';
+  const h = document.createElement('h2'); h.textContent = 'The starting article didn’t load';
+  const p = document.createElement('p'); p.textContent = e.message;
+  const row = document.createElement('div'); row.className = 'row';
+  const retry = document.createElement('button'); retry.className = 'btn btn-sm'; retry.type = 'button'; retry.textContent = 'Try again'; retry.addEventListener('click', loadStart);
+  const back = document.createElement('button'); back.className = 'btn btn-sm btn-cream'; back.type = 'button'; back.textContent = 'Back to setup'; back.addEventListener('click', backToSetup);
+  if (e.retryable) row.append(retry); row.append(back);
+  box.append(h, p, row); E['article-host'].replaceChildren(box);
+  E['hud-now'].textContent = 'Not loaded'; announce(e.message);
+}
+function backToSetup() { disarmGuards(); R && R.seq++; R = null; clearInterval(timerHandle); show('setup'); updateStartButton(); }
+
+/* ----- follow a link ----- */
+async function navigate(title) {
+  if (!R || R.status !== 'playing') return;
+  const seq = ++R.seq; R.status = 'loading'; hideBanner(); setBusy(true, `Loading “${title}”…`);
+  let data;
+  try { data = await fetchArticle(title); }
+  catch (e) { if (seq !== R.seq || !R) return; R.status = 'playing'; setBusy(false); showBanner(e, title); announce(e.message); return; }
+  if (seq !== R.seq) return;
+  R.status = 'playing'; setBusy(false);
+  if (data.pageid === R.current.pageid) { toast('That link leads to the article you’re already reading. No click counted.'); return; }
+  R.current = { pageid: data.pageid, title: data.title };
+  R.route.push({ pageid: data.pageid, title: data.title });
+  R.clicks += 1;
+  const won = data.pageid === R.target.pageid;      // identity by page id, so redirects and alternate titles still win
+  if (won) { R.status = 'won'; stopTimer(); }
+  const h1 = renderArticle(data);
+  updateHud(); blip();
+  announce(won ? `You reached ${data.title}.` : `Now reading ${data.title}. ${R.clicks} click${R.clicks === 1 ? '' : 's'}.`);
+  scrollToReader(h1);
+  if (won) setTimeout(() => showResults(true), reduceMotion() ? 0 : 900);
+}
+
+function scrollToAnchor(id) {
+  const el = E['article-host'].querySelector('#' + CSS.escape('a-' + id));
+  if (!el) { toast('That section isn’t available here.'); return; }
+  el.scrollIntoView({ behavior: reduceMotion() ? 'auto' : 'smooth', block: 'start' });
+}
+
+E['article-host'].addEventListener('click', e => {
+  const el = e.target.closest('[data-title], [data-anchor], [data-off]');
+  if (!el || !E['article-host'].contains(el)) return;
+  e.preventDefault();
+  if (el.hasAttribute('data-anchor')) return scrollToAnchor(el.getAttribute('data-anchor'));
+  if (el.hasAttribute('data-title')) return navigate(el.getAttribute('data-title'));
+  toast(el.getAttribute('data-off') + '.');
+});
+E['article-host'].addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  const el = e.target.closest('[data-title], [data-anchor]');
+  if (el) { e.preventDefault(); el.click(); }
+});
+E['article-host'].addEventListener('auxclick', e => { if (e.target.closest('[data-title], [data-anchor], [data-off]')) e.preventDefault(); });
+E['article-host'].addEventListener('contextmenu', e => { if (e.target.closest('[data-title]')) e.preventDefault(); });
+
+E['banner-retry'].addEventListener('click', () => { if (lastFailedTitle) navigate(lastFailedTitle); });
+E['banner-dismiss'].addEventListener('click', hideBanner);
+
+/* ----- history guard: back/forward must not act as a free shortcut ----- */
+let guardsOn = false;
+function onPop() { try { history.pushState({ wb: 1 }, '', location.href); } catch {} toast('Back and forward are turned off during a round.'); }
+function onUnload(e) { if (R && (R.status === 'playing' || R.status === 'loading')) { e.preventDefault(); e.returnValue = ''; return ''; } }
+function armGuards() {
+  if (guardsOn) return; guardsOn = true;
+  try { history.pushState({ wb: 1 }, '', location.href); } catch {}
+  window.addEventListener('popstate', onPop); window.addEventListener('beforeunload', onUnload);
+}
+function disarmGuards() { guardsOn = false; window.removeEventListener('popstate', onPop); window.removeEventListener('beforeunload', onUnload); }
+
+/* ----- give up ----- */
+function openDialog() { const d = E['giveup-dialog']; if (typeof d.showModal === 'function') d.showModal(); else d.setAttribute('open', ''); E['gu-keep'].focus(); }
+function closeDialog() { const d = E['giveup-dialog']; if (typeof d.close === 'function' && d.open) d.close(); else d.removeAttribute('open'); }
+E['give-up'].addEventListener('click', () => { if (R && (R.status === 'playing' || R.status === 'loading')) openDialog(); });
+E['gu-keep'].addEventListener('click', closeDialog);
+E['gu-confirm'].addEventListener('click', () => {
+  closeDialog();
+  if (!R || R.status === 'won') return;
+  R.seq++; R.status = 'gaveup'; stopTimer(); setBusy(false); showResults(false);
+});
+
+/* =========================================================
+   Results + celebration
+   ========================================================= */
+function showResults(won) {
+  disarmGuards();
+  E.confetti.replaceChildren();
+  const title = won ? 'You boogied!' : 'Round over';
+  E['res-title'].replaceChildren();
+  E['res-title'].setAttribute('aria-label', title);
+  [...title].forEach((ch, i) => { const s = document.createElement('span'); s.setAttribute('aria-hidden', 'true'); s.style.setProperty('--i', i); s.textContent = ch; E['res-title'].append(s); });
+  E['res-sub'].textContent = won
+    ? `You found your way from ${R.start.title} to ${R.target.title}.`
+    : `You gave up while reading ${R.current ? R.current.title : R.start.title}. The target was ${R.target.title}.`;
+  E['res-time'].textContent = fmtTime(elapsed(), true);
+  E['res-clicks'].textContent = String(R.clicks);
+  renderRoute(E['res-route'], won ? false : true);
+  show('results');
+  if (won) { celebrate(); fanfare(); announce(`You reached ${R.target.title} in ${fmtTime(elapsed())} with ${R.clicks} clicks.`); }
+  else announce('Round over.');
+}
+function celebrate() {
+  if (reduceMotion()) return;
+  const layer = E.confetti; layer.replaceChildren();
+  const kinds = ['v', 's', 'd', 'o', 's', 'v'];
+  for (let i = 0; i < 46; i++) {
+    const c = document.createElement('i'); c.className = 'conf ' + kinds[i % kinds.length];
+    c.style.setProperty('--x', Math.random() * 100 + 'vw');
+    c.style.setProperty('--s', (14 + Math.random() * 20) + 'px');
+    c.style.setProperty('--d', (2.6 + Math.random() * 1.8) + 's');
+    c.style.setProperty('--delay', (Math.random() * 0.9) + 's');
+    c.style.setProperty('--drift', (Math.random() * 160 - 80) + 'px');
+    c.style.setProperty('--r', (Math.random() * 900 - 450) + 'deg');
+    layer.append(c);
+  }
+  setTimeout(() => layer.replaceChildren(), 6000);
+}
+E['play-again'].addEventListener('click', () => { R = null; setup.start = setup.target = null; show('setup'); setMode(setup.mode); updateStartButton(); if (setup.mode === 'random') doRoll(); else doRoll(); });
+E['replay-same'].addEventListener('click', () => { setup.start = R.start; setup.target = R.target; setup.busy = false; show('setup'); renderCard('start', setup.start); renderCard('target', setup.target); updateStartButton(); startRound(); });
+E['copy-result'].addEventListener('click', async () => {
+  const won = R.status === 'won';
+  const text = `Wiki Boogie: ${R.start.title} → ${R.target.title}\n${won ? `Reached in ${fmtTime(elapsed(), true)} with ${R.clicks} clicks` : `Gave up after ${fmtTime(elapsed(), true)} and ${R.clicks} clicks`}\nRoute: ${R.route.map(r => r.title).join(' → ')}`;
+  try { await navigator.clipboard.writeText(text); toast('Result copied.'); } catch { toast('Couldn’t copy automatically. Select the route and copy it.'); }
+});
+E['start-round'].addEventListener('click', startRound);
+
+/* ----- layout niceties ----- */
+function syncRouteOpen() { E['route-panel'].open = window.matchMedia ? window.matchMedia('(min-width: 1080px)').matches : true; }
+if (window.matchMedia) { try { window.matchMedia('(min-width: 1080px)').addEventListener('change', syncRouteOpen); } catch {} }
+if ('ResizeObserver' in window) new ResizeObserver(() => { document.documentElement.style.setProperty('--hud-h', E.hud.offsetHeight + 'px'); }).observe(E.hud);
+
+window.__wikiBoogie = { classifyHref, buildArticle, round: () => R, setup: () => setup, fmtTime };
+})();
+</script>
+</body>
+</html>
